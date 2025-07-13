@@ -10,6 +10,7 @@ const App = () => {
   const [isGeneratingPrompts, setIsGeneratingPrompts] = useState(false); // Loading state for prompt generation
   const [promptError, setPromptError] = useState(''); // Error message for prompt generation
   const [message, setMessage] = useState(''); // General message display (e.g., for success or minor errors)
+  const [geminiApiKey, setGeminiApiKey] = useState(''); // Stores the optional Gemini API key
 
   // State for character management
   const [showCharacterInput, setShowCharacterInput] = useState(false); // Controls visibility of character input section
@@ -102,12 +103,26 @@ const App = () => {
     localStorage.setItem('storyIllustrator_currentCharacterDescription', currentCharacterDescription);
   }, [currentCharacterDescription]);
 
+  // Load geminiApiKey from local storage on component mount
+  useEffect(() => {
+    const savedApiKey = localStorage.getItem('storyIllustrator_geminiApiKey');
+    if (savedApiKey) {
+      setGeminiApiKey(savedApiKey);
+    }
+  }, []);
+
+  // Save geminiApiKey to local storage whenever it changes
+  useEffect(() => {
+    localStorage.setItem('storyIllustrator_geminiApiKey', geminiApiKey);
+  }, [geminiApiKey]);
+
   // --- Clear Input Functions ---
   const clearStory = () => setStory('');
   const clearStylePrompt = () => setStylePrompt('');
   const clearNumIllustrations = () => setNumIllustrations(1); // Reset to default 1
   const clearCurrentCharacterName = () => setCurrentCharacterName('');
   const clearCurrentCharacterDescription = () => setCurrentCharacterDescription('');
+  const clearGeminiApiKey = () => setGeminiApiKey('');
 
 
   // Function to add or update a character
@@ -191,8 +206,8 @@ const App = () => {
         parameters: { "sampleCount": promptToGenerate.numImagesToGenerate } // Use the selected number of images
       };
 
-      // API key is left empty as Canvas will provide it at runtime
-      const apiKey = "";
+      // Use user-provided API key if available, otherwise use empty string for Canvas to inject
+      const apiKey = geminiApiKey || "";
       const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict?key=${apiKey}`;
 
       // Make the fetch call to the Imagen API for image generation
@@ -254,7 +269,7 @@ const App = () => {
     setIsGeneratingPrompts(true);
     setPromptError('');
     setIllustrationPrompts([]); // Clear previous prompts
-    setMessage('');
+    setMessage('Generating illustration prompts...');
 
     try {
       // Construct the prompt for the Gemini API to generate illustration descriptions
@@ -282,11 +297,10 @@ const App = () => {
         }
       };
 
-      // API key is left empty as Canvas will provide it at runtime
-      const apiKey = "";
+      // Use user-provided API key if available, otherwise use empty string for Canvas to inject
+      const apiKey = geminiApiKey || "";
       const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
 
-      // Make the fetch call to the Gemini API for text generation
       const response = await fetch(apiUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -300,14 +314,12 @@ const App = () => {
 
       const result = await response.json();
 
-      // Check if the response contains valid candidates and content
       if (result.candidates && result.candidates.length > 0 &&
           result.candidates[0].content && result.candidates[0].content.parts &&
           result.candidates[0].content.parts.length > 0) {
         const jsonString = result.candidates[0].content.parts[0].text;
         const parsedPrompts = JSON.parse(jsonString);
 
-        // Map the parsed prompts into our state structure
         const newPrompts = parsedPrompts.map((prompt, index) => ({
           id: `prompt-${Date.now()}-${index}`, // Unique ID for each prompt
           promptText: prompt,
@@ -320,7 +332,6 @@ const App = () => {
         setMessage('Illustration prompts generated successfully! Now generating initial images...');
 
         // Automatically generate images for the newly created prompts
-        // Use a loop with await to ensure sequential generation and state updates
         for (const promptItem of newPrompts) {
           await handleGenerateImage(promptItem.id);
         }
@@ -446,6 +457,36 @@ const App = () => {
             </div>
           </div>
         </div>
+
+        {/* Gemini API Key Input */}
+        <div className="mb-6">
+          <label htmlFor="geminiApiKey" className="block text-gray-800 text-lg font-semibold mb-2">
+            Gemini API Key (Optional):
+          </label>
+          <div className="relative">
+            <input
+              type="text"
+              id="geminiApiKey"
+              className="w-full p-3 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition duration-200 ease-in-out text-gray-700"
+              value={geminiApiKey}
+              onChange={(e) => setGeminiApiKey(e.target.value)}
+              placeholder="Enter your Gemini API key here (e.g., AIza...)"
+            />
+            {geminiApiKey && (
+              <button
+                onClick={clearGeminiApiKey}
+                className="absolute top-1/2 -translate-y-1/2 right-3 text-gray-400 hover:text-gray-600 focus:outline-none"
+                aria-label="Clear API key"
+              >
+                &times;
+              </button>
+            )}
+          </div>
+          <p className="text-sm text-gray-500 mt-1">
+            If left blank, the application will attempt to use an environment-provided key.
+          </p>
+        </div>
+
 
         {/* Add Characters Button */}
         <button
